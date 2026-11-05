@@ -1,6 +1,8 @@
 /* Shop Bot Mini App: карта точек, выделение района, маршрут. */
 (function () {
   const tg = window.Telegram && window.Telegram.WebApp;
+  // initData пуст, когда карта открыта кнопкой клавиатуры, поэтому проверяем платформу
+  const inTelegram = !!(tg && tg.platform && tg.platform !== "unknown");
   const COLORS = { "Пятерочка": "#d6262c", "Магнит": "#1f6fd1" };
   const ROUTE_COLOR = "#7c3aed";
   const SPB_CENTER = [59.93, 30.33];
@@ -219,7 +221,7 @@
 
     state.lastRoute = { ids: shops.map((p) => p.id), travel: state.travel, start: hasStart ? [ordered[0].lat, ordered[0].lon] : null,
       km: +(dist / 1000).toFixed(1), min: Math.round(dur / 60), approx: trip.approximate };
-    $("sendBtn").classList.toggle("hidden", !(tg && tg.initData));
+    $("sendBtn").classList.toggle("hidden", !inTelegram);
     $("result").classList.remove("hidden");
   }
 
