@@ -5,7 +5,7 @@
     car: "https://routing.openstreetmap.de/routed-car",
   };
   const MAX_TRIP_POINTS = 90;      // больше публичный сервер может не принять
-  const LINK_CHUNK = 10;           // точек в одной ссылке на Яндекс Карты
+  const LINK_CHUNK = 30;           // точек в одной ссылке; веб-Яндекс проверен на 30
   const FALLBACK_SPEED = { foot: 1.25, car: 7 }; // м/с, если сервер маршрутов недоступен
 
   function haversine(a, b) {
