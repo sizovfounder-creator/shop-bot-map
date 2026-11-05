@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Shop Bot</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="map"></div>
+
+<header class="bar">
+  <div class="chips" id="chainChips">
+    <button data-chain="all" class="on">Все</button>
+    <button data-chain="Пятерочка"><i class="dot p"></i>Пятёрочка</button>
+    <button data-chain="Магнит"><i class="dot m"></i>Магнит</button>
+  </div>
+  <div class="seg" id="modeSeg">
+    <button data-mode="tap" class="on">Тап</button>
+    <button data-mode="lasso">Обвести</button>
+    <button data-mode="radius">Радиус</button>
+  </div>
+  <div class="radius hidden" id="radiusBox">
+    <input type="range" id="radius" min="300" max="5000" step="100" value="1500">
+    <span id="radiusVal">1.5 км</span>
+    <button id="radiusHere" class="ghost">Где я</button>
+  </div>
+  <div class="hint" id="hint">Тапай по точкам, чтобы добавить их в маршрут</div>
+</header>
+
+<section class="sheet" id="sheet">
+  <div class="row">
+    <b id="selCount">Выбрано: 0</b>
+    <button class="ghost" id="clearBtn">Сбросить</button>
+  </div>
+  <div class="row opts">
+    <div class="seg small" id="travelSeg">
+      <button data-travel="foot" class="on">Пешком</button>
+      <button data-travel="car">Авто</button>
+    </div>
+    <label class="check"><input type="checkbox" id="fromMe" checked> от меня</label>
+  </div>
+  <button class="primary" id="buildBtn" disabled>Построить маршрут</button>
+
+  <div id="result" class="hidden">
+    <div class="summary" id="summary"></div>
+    <div class="links" id="links"></div>
+    <button class="primary hidden" id="sendBtn">Отправить список в чат</button>
+    <ol class="list" id="list"></ol>
+  </div>
+</section>
+
+<script src="route.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
