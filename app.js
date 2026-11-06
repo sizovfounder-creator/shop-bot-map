@@ -20,7 +20,7 @@
     address: "🟡 адрес подтверждён, магазина нет в базе OSM",
     check: "⚠️ проверить: источники расходятся",
   };
-  const MAP_ID = /^[A-Za-z0-9_-]{6,40}$/;
+  const MAP_ID = /^[A-Za-z0-9_-]{6,40}$/;  // в JS $ не пропускает перевод строки без флага m
   const ROUTE_COLOR = "#7c3aed";
   const SPB_CENTER = [59.93, 30.33];
   const HINTS = {
@@ -308,7 +308,7 @@
       state.points = data.points;
       buildChips(data.points);
       data.points.forEach((p) => {
-        const m = L.circleMarker([p.lat, p.lon], styleFor(p)).bindTooltip(p.title).bindPopup(popupHtml(p));
+        const m = L.circleMarker([p.lat, p.lon], styleFor(p)).bindTooltip(document.createTextNode(p.title)).bindPopup(popupHtml(p));
         m.on("click", () => { if (state.mode === "tap") toggle(p.id); });
         markers.set(p.id, m);
       });
