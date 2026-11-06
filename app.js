@@ -3,7 +3,24 @@
   const tg = window.Telegram && window.Telegram.WebApp;
   // initData пуст, когда карта открыта кнопкой клавиатуры, поэтому проверяем платформу
   const inTelegram = !!(tg && tg.platform && tg.platform !== "unknown");
-  const COLORS = { "Пятерочка": "#d6262c", "Магнит": "#1f6fd1" };
+  const KNOWN_COLORS = { "пятерочка": "#d6262c", "pyaterochka": "#d6262c", "магнит": "#1f6fd1", "magnit": "#1f6fd1",
+    "перекресток": "#0f8a3c", "лента": "#1d3c8f", "дикси": "#f08c00", "вкусвилл": "#2bb24c", "ашан": "#e2001a" };
+  const PALETTE = ["#7c3aed", "#0891b2", "#db2777", "#65a30d", "#ea580c", "#4f46e5"];
+  const chainColors = new Map();
+  function colorFor(chain) {
+    const key = String(chain).toLowerCase().replace(/ё/g, "е").trim();
+    if (!chainColors.has(key)) {
+      const known = Object.keys(KNOWN_COLORS).find((k) => key.includes(k));
+      chainColors.set(key, known ? KNOWN_COLORS[known] : PALETTE[chainColors.size % PALETTE.length]);
+    }
+    return chainColors.get(key);
+  }
+  const STATUS = {
+    store: "✅ магазин найден на карте",
+    address: "🟡 адрес подтверждён, магазина нет в базе OSM",
+    check: "⚠️ проверить: источники расходятся",
+  };
+  const MAP_ID = /^[A-Za-z0-9_-]{6,40}$/;
   const ROUTE_COLOR = "#7c3aed";
   const SPB_CENTER = [59.93, 30.33];
   const HINTS = {
@@ -34,7 +51,8 @@
   function styleFor(p) {
     const on = state.selected.has(p.id);
     return { radius: on ? 8 : 6, color: on ? "#111" : "#fff", weight: on ? 3 : 1.5,
-      fillColor: COLORS[p.chain], fillOpacity: on ? 1 : 0.85 };
+      fillColor: colorFor(p.chain), fillOpacity: on ? 1 : 0.85,
+      ...(p.status === "check" && !on ? { color: "#f59e0b", weight: 3 } : {}) };
   }
 
   function popupHtml(p) {
@@ -47,6 +65,14 @@
       el.appendChild(s);
     }
     if (p.tl) { const s = document.createElement("div"); s.textContent = `TL: ${p.tl}`; el.appendChild(s); }
+    if (p.status && STATUS[p.status]) {
+      const s = document.createElement("div"); s.textContent = STATUS[p.status] + (p.note ? ` (${p.note})` : "");
+      el.appendChild(s);
+    }
+    if (p.raw && p.raw !== p.title) {
+      const s = document.createElement("div"); s.style.color = "#888"; s.textContent = `в файле: ${p.raw}`;
+      el.appendChild(s);
+    }
     return el;
   }
 
@@ -180,7 +206,7 @@
     const shops = ordered.filter((p) => p.id !== "me");
     shops.forEach((p, i) => {
       L.marker([p.lat, p.lon], { icon: L.divIcon({ className: "",
-        html: `<div class="num-pin" style="background:${COLORS[p.chain]}">${i + 1}</div>`, iconSize: [24, 24] }) })
+        html: `<div class="num-pin" style="background:${colorFor(p.chain)}">${i + 1}</div>`, iconSize: [24, 24] }) })
         .bindPopup(popupHtml(p)).addTo(routeLayer);
     });
     map.fitBounds(L.latLngBounds(trip.geometry), { paddingTopLeft: [20, 140], paddingBottomRight: [20, window.innerHeight * 0.45] });
@@ -207,7 +233,7 @@
     const legOffset = hasStart ? 0 : -1;
     shops.forEach((p, i) => {
       const li = document.createElement("li");
-      const n = document.createElement("span"); n.className = "n"; n.style.background = COLORS[p.chain]; n.textContent = i + 1;
+      const n = document.createElement("span"); n.className = "n"; n.style.background = colorFor(p.chain); n.textContent = i + 1;
       const body = document.createElement("div");
       const t = document.createElement("div"); t.textContent = p.title;
       const s = document.createElement("div"); s.className = "sub"; s.textContent = p.chain + (p.uc != null ? ` · UC ${p.uc}` : "");
@@ -219,7 +245,7 @@
       $("list").appendChild(li);
     });
 
-    state.lastRoute = { ids: shops.map((p) => p.id), travel: state.travel, start: hasStart ? [ordered[0].lat, ordered[0].lon] : null,
+    state.lastRoute = { map: currentMapId(), ids: shops.map((p) => p.id), travel: state.travel, start: hasStart ? [ordered[0].lat, ordered[0].lon] : null,
       km: +(dist / 1000).toFixed(1), min: Math.round(dur / 60), approx: trip.approximate };
     $("sendBtn").classList.toggle("hidden", !inTelegram);
     $("result").classList.remove("hidden");
@@ -250,15 +276,45 @@
 
   /* ---------- старт ---------- */
   if (tg) { tg.ready(); tg.expand(); }
-  fetch("points.json")
+  function buildChips(points) {
+    const chains = [...new Set(points.map((p) => p.chain))];
+    const box = $("chainChips");
+    box.innerHTML = "";
+    const mk = (value, label, color) => {
+      const b = document.createElement("button");
+      b.dataset.chain = value;
+      if (color) { const i = document.createElement("i"); i.className = "dot"; i.style.background = color; b.appendChild(i); }
+      b.append(label);
+      if (value === "all") b.classList.add("on");
+      box.appendChild(b);
+    };
+    mk("all", "Все");
+    if (chains.length > 1) chains.forEach((c) => mk(c, c, colorFor(c)));
+  }
+
+  function currentMapId() {
+    const id = new URLSearchParams(location.search).get("map");
+    return id && MAP_ID.test(id) ? id : null;
+  }
+
+  function source() {
+    const id = currentMapId();
+    return id ? `maps/${id}.json` : "points.json";
+  }
+
+  fetch(source(), { cache: "no-cache" })
     .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then((data) => {
       state.points = data.points;
+      buildChips(data.points);
       data.points.forEach((p) => {
-        const m = L.circleMarker([p.lat, p.lon], styleFor(p)).bindTooltip(p.title);
+        const m = L.circleMarker([p.lat, p.lon], styleFor(p)).bindTooltip(p.title).bindPopup(popupHtml(p));
         m.on("click", () => { if (state.mode === "tap") toggle(p.id); });
         markers.set(p.id, m);
       });
+      if (data.points.length) map.fitBounds(L.latLngBounds(data.points.map((p) => [p.lat, p.lon])), { padding: [30, 30] });
+      const warn = data.points.filter((p) => p.status === "check").length;
+      if (data.title) $("hint").textContent = `${data.title}: ${data.points.length} точек` + (warn ? `, ⚠️ ${warn} проверить` : "");
       renderMarkers();
     })
     .catch(() => { $("hint").textContent = "Не удалось загрузить точки. Обнови страницу."; });
