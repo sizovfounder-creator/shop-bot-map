@@ -3,9 +3,10 @@
   const tg = window.Telegram && window.Telegram.WebApp;
   // initData пуст, когда карта открыта кнопкой клавиатуры, поэтому проверяем платформу
   const inTelegram = !!(tg && tg.platform && tg.platform !== "unknown");
-  const KNOWN_COLORS = { "пятерочка": "#d6262c", "pyaterochka": "#d6262c", "магнит": "#1f6fd1", "magnit": "#1f6fd1",
-    "перекресток": "#0f8a3c", "лента": "#1d3c8f", "дикси": "#f08c00", "вкусвилл": "#2bb24c", "ашан": "#e2001a" };
-  const PALETTE = ["#7c3aed", "#0891b2", "#db2777", "#65a30d", "#ea580c", "#4f46e5"];
+  // сети — нейтральными цветами: оранжевый занят под «в маршруте»
+  const KNOWN_COLORS = { "пятерочка": "#f2f2f2", "pyaterochka": "#f2f2f2", "магнит": "#5aa9ff", "magnit": "#5aa9ff",
+    "перекресток": "#7fd1b9", "вкусвилл": "#a8e6a1", "лента": "#c3c8ff", "дикси": "#f4b6c2" };
+  const PALETTE = ["#7fd1b9", "#f4b6c2", "#c9c9c9", "#a8e6a1", "#9fd0ff"];
   const chainColors = new Map();
   function colorFor(chain) {
     const key = String(chain).toLowerCase().replace(/ё/g, "е").trim();
@@ -16,15 +17,15 @@
     return chainColors.get(key);
   }
   const STATUS = {
-    store: "✅ магазин найден на карте",
-    address: "🟡 адрес подтверждён, магазина нет в базе OSM",
-    check: "⚠️ проверить: источники расходятся",
+    store: { color: "#7fd1b9", text: "Магазин найден, точка стоит на нём" },
+    address: { color: "#b4b4b4", text: "Адрес подтверждён, магазина нет в базе OSM" },
+    check: { color: "#ffb27a", text: "Проверить: источники расходятся" },
   };
   const MAP_ID = /^[A-Za-z0-9_-]{6,40}$/;  // в JS $ не пропускает перевод строки без флага m
-  const ROUTE_COLOR = "#7c3aed";
+  const ACCENT = "#ff6b00";
   const SPB_CENTER = [59.93, 30.33];
   const HINTS = {
-    tap: "Тапай по точкам, чтобы добавить их в маршрут",
+    tap: "Нажимай на точки, чтобы добавить их в маршрут",
     lasso: "Обведи район пальцем, карта в этом режиме не двигается",
     radius: "Все точки в радиусе от тебя или от центра карты",
   };
@@ -36,6 +37,7 @@
 
   const $ = (id) => document.getElementById(id);
   const map = L.map("map", { zoomControl: false, attributionControl: true }).setView(SPB_CENTER, 11);
+  map.attributionControl.setPrefix(false);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19, attribution: "© OpenStreetMap",
   }).addTo(map);
@@ -49,31 +51,40 @@
   function visible(p) { return state.chain === "all" || p.chain === state.chain; }
 
   function styleFor(p) {
-    const on = state.selected.has(p.id);
-    return { radius: on ? 8 : 6, color: on ? "#111" : "#fff", weight: on ? 3 : 1.5,
-      fillColor: colorFor(p.chain), fillOpacity: on ? 1 : 0.85,
-      ...(p.status === "check" && !on ? { color: "#f59e0b", weight: 3 } : {}) };
+    if (state.selected.has(p.id)) {
+      return { radius: 8, color: "#fff", weight: 2, fillColor: ACCENT, fillOpacity: 1, dashArray: null };
+    }
+    const check = p.status === "check";
+    return { radius: 5.5, color: check ? STATUS.check.color : "#000", weight: check ? 2 : 1.5,
+      dashArray: check ? "2 3" : null, fillColor: colorFor(p.chain), fillOpacity: 0.95 };
+  }
+
+  function plural(n, one, few, many) {
+    if (n % 10 === 1 && n % 100 !== 11) return one;
+    return n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many;
+  }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
   }
 
   function popupHtml(p) {
-    const el = document.createElement("div");
-    const t = document.createElement("b"); t.textContent = `${p.chain}: ${p.title}`;
-    el.appendChild(t);
-    if (p.uc != null) {
-      const s = document.createElement("div");
-      s.textContent = `UC факт: ${p.uc}` + (p.plan != null ? ` · ${p.plan}% плана` : "");
-      el.appendChild(s);
+    const box = el("div");
+    box.append(el("div", "pop-title", p.title), el("div", "pop-chain", p.chain));
+    if (p.uc != null) box.append(el("div", "pop-chain", `UC факт ${p.uc}` + (p.plan != null ? ` · ${p.plan}% плана` : "")));
+    if (p.tl) box.append(el("div", "pop-chain", p.tl));
+    const st = STATUS[p.status];
+    if (st) {
+      const row = el("div", "pop-status");
+      const dot = el("i"); dot.style.background = st.color;
+      row.append(dot, st.text + (p.note ? `. ${p.note}` : ""));
+      box.append(row);
     }
-    if (p.tl) { const s = document.createElement("div"); s.textContent = `TL: ${p.tl}`; el.appendChild(s); }
-    if (p.status && STATUS[p.status]) {
-      const s = document.createElement("div"); s.textContent = STATUS[p.status] + (p.note ? ` (${p.note})` : "");
-      el.appendChild(s);
-    }
-    if (p.raw && p.raw !== p.title) {
-      const s = document.createElement("div"); s.style.color = "#888"; s.textContent = `в файле: ${p.raw}`;
-      el.appendChild(s);
-    }
-    return el;
+    if (p.raw && p.raw !== p.title) box.append(el("div", "pop-raw", `В файле: ${p.raw}`));
+    return box;
   }
 
   function renderMarkers() {
@@ -82,8 +93,20 @@
       if (visible(p)) { m.addTo(map); m.setStyle(styleFor(p)); } else { m.remove(); }
     });
     const n = state.selected.size;
-    $("selCount").textContent = `Выбрано: ${n}`;
+    $("selNum").textContent = n;
+    $("selNum").classList.toggle("on", n > 0);
+    $("selLabel").textContent = `${plural(n, "точка выбрана", "точки выбрано", "точек выбрано")}`;
     $("buildBtn").disabled = n < 1;
+    updateHint();
+  }
+
+  function updateHint() {
+    const need = state.mode === "lasso" || (state.mode === "tap" && state.selected.size === 0);
+    if (need) $("hint").textContent = HINTS[state.mode];
+    if ($("hint").classList.contains("hidden") === need) {
+      $("hint").classList.toggle("hidden", !need);
+      map.invalidateSize();
+    }
   }
 
   function setSelection(ids) {
@@ -102,12 +125,13 @@
   function setMode(mode) {
     state.mode = mode;
     document.querySelectorAll("#modeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
-    $("hint").textContent = HINTS[mode];
     $("radiusBox").classList.toggle("hidden", mode !== "radius");
     const lasso = mode === "lasso";
     $("map").classList.toggle("lasso", lasso);
     [map.dragging, map.touchZoom, map.doubleClickZoom].forEach((h) => (lasso ? h.disable() : h.enable()));
     overlay.clearLayers();
+    updateHint();
+    map.invalidateSize();
     if (mode === "radius") applyRadius();
   }
 
@@ -117,7 +141,7 @@
   $("map").addEventListener("pointerdown", (e) => {
     if (state.mode !== "lasso") return;
     overlay.clearLayers();
-    drawing = { pts: [latlngFromEvent(e)], line: L.polyline([], { color: "#111", weight: 2, dashArray: "4 4" }).addTo(overlay) };
+    drawing = { pts: [latlngFromEvent(e)], line: L.polyline([], { color: ACCENT, weight: 2, dashArray: "4 5" }).addTo(overlay) };
     $("map").setPointerCapture(e.pointerId);
   });
   $("map").addEventListener("pointermove", (e) => {
@@ -131,7 +155,7 @@
     overlay.clearLayers();
     drawing = null;
     if (poly.length < 3) return;
-    L.polygon(poly.map((p) => [p.lat, p.lon]), { color: "#111", weight: 2, fillOpacity: 0.06 }).addTo(overlay);
+    L.polygon(poly.map((p) => [p.lat, p.lon]), { color: ACCENT, weight: 1.5, fillColor: ACCENT, fillOpacity: 0.08 }).addTo(overlay);
     const ids = state.points.filter((p) => visible(p) && Route.insidePolygon(p, poly)).map((p) => p.id);
     setSelection(ids);
   });
@@ -143,7 +167,7 @@
     const c = state.radiusCenter || (state.myPos ? state.myPos : { lat: map.getCenter().lat, lon: map.getCenter().lng });
     state.radiusCenter = c;
     overlay.clearLayers();
-    L.circle([c.lat, c.lon], { radius: r, color: "#111", weight: 2, fillOpacity: 0.06 }).addTo(overlay);
+    L.circle([c.lat, c.lon], { radius: r, color: ACCENT, weight: 1.5, fillColor: ACCENT, fillOpacity: 0.08 }).addTo(overlay);
     setSelection(state.points.filter((p) => visible(p) && Route.haversine(c, p) <= r).map((p) => p.id));
   }
 
@@ -182,11 +206,13 @@
   async function build() {
     const chosen = state.points.filter((p) => state.selected.has(p.id));
     if (chosen.length > Route.MAX_TRIP_POINTS) {
-      $("summary").textContent = `Выбрано ${chosen.length}, максимум ${Route.MAX_TRIP_POINTS}. Сузь район.`;
+      $("summary").innerHTML = "";
+      $("summaryNote").textContent = `Выбрано ${chosen.length}, максимум ${Route.MAX_TRIP_POINTS}. Сузь район.`;
+      $("summaryNote").className = "note warn";
       $("result").classList.remove("hidden");
       return;
     }
-    $("buildBtn").disabled = true; $("buildBtn").textContent = "Считаю…";
+    $("buildBtn").disabled = true; $("buildBtn").textContent = "Считаю маршрут…";
     const me = state.fromMe ? (state.myPos || (await locate())) : null;
     const start = me ? { id: "me", title: "Старт: я здесь", lat: me.lat, lon: me.lon } : null;
     const pts = start ? [start, ...chosen] : pickEdgeStart(chosen);
@@ -199,32 +225,41 @@
 
   function renderRoute(ordered, trip, hasStart) {
     routeLayer.clearLayers();
-    // подложка светлая в любой теме, поэтому линия всегда тёмная с белой обводкой
-    L.polyline(trip.geometry, { color: "#fff", weight: 8, opacity: 0.9 }).addTo(routeLayer);
-    L.polyline(trip.geometry, { color: ROUTE_COLOR, weight: 4, opacity: 0.9,
+    L.polyline(trip.geometry, { color: "#000", weight: 8, opacity: 0.7 }).addTo(routeLayer);
+    L.polyline(trip.geometry, { color: ACCENT, weight: 4, opacity: 1,
       dashArray: trip.approximate ? "6 6" : null }).addTo(routeLayer);
     const shops = ordered.filter((p) => p.id !== "me");
     shops.forEach((p, i) => {
       L.marker([p.lat, p.lon], { icon: L.divIcon({ className: "",
-        html: `<div class="num-pin" style="background:${colorFor(p.chain)}">${i + 1}</div>`, iconSize: [24, 24] }) })
+        html: `<div class="num-pin">${i + 1}</div>`, iconSize: [26, 26] }) })
         .bindPopup(popupHtml(p)).addTo(routeLayer);
     });
-    map.fitBounds(L.latLngBounds(trip.geometry), { paddingTopLeft: [20, 140], paddingBottomRight: [20, window.innerHeight * 0.45] });
+    map.fitBounds(L.latLngBounds(trip.geometry), { paddingTopLeft: [24, 24], paddingBottomRight: [24, Math.min(window.innerHeight * 0.4, 320)] });
 
     const dist = trip.legs.reduce((s, l) => s + l.distance, 0);
     const dur = trip.legs.reduce((s, l) => s + l.duration, 0);
+    const km = dist / 1000;
+    const mins = Math.round(dur / 60);
+    const kpi = (label, value, unit) => {
+      const d = el("div"); const dd = el("dd", null, value);
+      if (unit) dd.append(el("small", null, unit));
+      d.append(el("dt", null, label), dd); return d;
+    };
     $("summary").innerHTML = "";
-    $("summary").append(`${shops.length} точек · ${Route.fmtDistance(dist)} · ${Route.fmtDuration(dur)}`);
-    const sub = document.createElement("small");
-    sub.textContent = (state.travel === "car" ? "на машине" : "пешком") + ", без учёта времени в точках" +
-      (trip.approximate ? ". Сервер маршрутов не ответил, расстояния примерные" : "");
-    $("summary").appendChild(sub);
+    $("summary").append(
+      kpi("Точек", String(shops.length)),
+      kpi("Путь", km < 1 ? String(Math.round(dist)) : km.toFixed(1), km < 1 ? "м" : "км"),
+      kpi("В пути", mins < 60 ? String(mins) : `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, "0")}`, mins < 60 ? "мин" : "ч"),
+    );
+    $("summaryNote").className = trip.approximate ? "note warn" : "note";
+    $("summaryNote").textContent = (state.travel === "car" ? "На машине" : "Пешком") + ", без учёта времени в точках" +
+      (trip.approximate ? ". Сервис маршрутов не ответил, расстояния примерные" : "");
 
     $("links").innerHTML = "";
     Route.yandexLinks(ordered, state.travel).forEach((l, i, all) => {
       const a = document.createElement("a");
       a.href = l.url; a.target = "_blank"; a.rel = "noopener";
-      a.textContent = all.length === 1 ? "Открыть в Яндекс Картах" : `Яндекс: часть ${i + 1}`;
+      a.textContent = all.length === 1 ? "Открыть в Яндекс Картах" : `Яндекс Карты · ${l.from}–${l.to}`;
       a.addEventListener("click", (e) => { if (tg && tg.openLink) { e.preventDefault(); tg.openLink(l.url); } });
       $("links").appendChild(a);
     });
@@ -232,16 +267,16 @@
     $("list").innerHTML = "";
     const legOffset = hasStart ? 0 : -1;
     shops.forEach((p, i) => {
-      const li = document.createElement("li");
-      const n = document.createElement("span"); n.className = "n"; n.style.background = colorFor(p.chain); n.textContent = i + 1;
-      const body = document.createElement("div");
-      const t = document.createElement("div"); t.textContent = p.title;
-      const s = document.createElement("div"); s.className = "sub"; s.textContent = p.chain + (p.uc != null ? ` · UC ${p.uc}` : "");
-      body.append(t, s);
-      const leg = document.createElement("span"); leg.className = "leg";
+      const li = el("li");
+      li.style.animationDelay = `${Math.min(i, 12) * 30}ms`;
+      const body = el("div");
+      const sub = el("div", "sub");
+      const dot = el("i", "dot"); dot.style.background = colorFor(p.chain);
+      sub.append(dot, p.chain + (p.uc != null ? ` · UC ${p.uc}` : ""));
+      if (p.status === "check") sub.append(el("span", "flag", "· проверить"));
+      body.append(el("div", "t", p.title), sub);
       const l = trip.legs[i + legOffset];
-      leg.textContent = l ? `+${Route.fmtDuration(l.duration)}` : "старт";
-      li.append(n, body, leg);
+      li.append(el("span", "n", String(i + 1)), body, el("span", "leg", l ? `+${Route.fmtDuration(l.duration)}` : "старт"));
       $("list").appendChild(li);
     });
 
@@ -271,6 +306,11 @@
     applyRadius();
   });
   $("clearBtn").addEventListener("click", () => { overlay.clearLayers(); setSelection([]); });
+  $("locateBtn").addEventListener("click", async () => {
+    const me = await locate();
+    if (me) map.setView([me.lat, me.lon], 14);
+    else { $("hint").textContent = "Не получилось определить, где ты. Разреши доступ к геолокации."; $("hint").classList.remove("hidden"); map.invalidateSize(); }
+  });
   $("buildBtn").addEventListener("click", build);
   $("sendBtn").addEventListener("click", () => { if (tg && state.lastRoute) tg.sendData(JSON.stringify(state.lastRoute)); });
 
@@ -288,8 +328,9 @@
       if (value === "all") b.classList.add("on");
       box.appendChild(b);
     };
+    if (chains.length < 2) return;   // одна сеть — фильтр не нужен
     mk("all", "Все");
-    if (chains.length > 1) chains.forEach((c) => mk(c, c, colorFor(c)));
+    chains.forEach((c) => mk(c, c, colorFor(c)));
   }
 
   function currentMapId() {
@@ -314,8 +355,11 @@
       });
       if (data.points.length) map.fitBounds(L.latLngBounds(data.points.map((p) => [p.lat, p.lon])), { padding: [30, 30] });
       const warn = data.points.filter((p) => p.status === "check").length;
-      if (data.title) $("hint").textContent = `${data.title}: ${data.points.length} точек` + (warn ? `, ⚠️ ${warn} проверить` : "");
+      const n = data.points.length;
+      $("title").textContent = data.city || data.title || "Карта точек";
+      $("meta").textContent = `${n} ${plural(n, "точка", "точки", "точек")}`;
+      if (warn) $("meta").append(" · ", el("b", null, `${warn} проверить`));
       renderMarkers();
     })
-    .catch(() => { $("hint").textContent = "Не удалось загрузить точки. Обнови страницу."; });
+    .catch(() => { $("meta").textContent = "Не удалось загрузить точки. Обнови страницу."; });
 })();

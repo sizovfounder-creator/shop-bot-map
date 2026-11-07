@@ -3,57 +3,81 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Shop Bot</title>
+<meta name="theme-color" content="#000000">
+<title>Карта точек</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://telegram.org/js/telegram-web-app.js?v=4"></script>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<link rel="stylesheet" href="app.css?v=4">
+<link rel="stylesheet" href="app.css?v=5">
 </head>
 <body>
-<div id="map"></div>
+<header class="top" id="top">
+  <div class="title-row">
+    <div class="title-text">
+      <h1 id="title">Карта точек</h1>
+      <p class="meta" id="meta">Загружаю точки…</p>
+    </div>
+    <button class="icon-btn" id="locateBtn" type="button" aria-label="Показать, где я">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+      </svg>
+    </button>
+  </div>
 
-<header class="bar">
-  <div class="chips" id="chainChips">
-    <button data-chain="all" class="on">Все</button>
-    <button data-chain="Пятерочка"><i class="dot p"></i>Пятёрочка</button>
-    <button data-chain="Магнит"><i class="dot m"></i>Магнит</button>
+  <div class="chips" id="chainChips" aria-label="Сеть"></div>
+
+  <div class="seg" id="modeSeg" role="group" aria-label="Как выбрать точки">
+    <button type="button" data-mode="tap" class="on">По точкам</button>
+    <button type="button" data-mode="lasso">Обвести</button>
+    <button type="button" data-mode="radius">Радиус</button>
   </div>
-  <div class="seg" id="modeSeg">
-    <button data-mode="tap" class="on">Тап</button>
-    <button data-mode="lasso">Обвести</button>
-    <button data-mode="radius">Радиус</button>
-  </div>
+
   <div class="radius hidden" id="radiusBox">
-    <input type="range" id="radius" min="300" max="5000" step="100" value="1500">
-    <span id="radiusVal">1.5 км</span>
-    <button id="radiusHere" class="ghost">Где я</button>
+    <input type="range" id="radius" min="300" max="5000" step="100" value="1500" aria-label="Радиус">
+    <span class="radius-val" id="radiusVal">1.5 км</span>
+    <button type="button" class="text-btn" id="radiusHere">От меня</button>
   </div>
-  <div class="hint" id="hint">Тапай по точкам, чтобы добавить их в маршрут</div>
+
+  <p class="hint" id="hint">Нажимай на точки, чтобы добавить их в маршрут</p>
 </header>
 
-<section class="sheet" id="sheet">
-  <div class="row">
-    <b id="selCount">Выбрано: 0</b>
-    <button class="ghost" id="clearBtn">Сбросить</button>
-  </div>
-  <div class="row opts">
-    <div class="seg small" id="travelSeg">
-      <button data-travel="foot" class="on">Пешком</button>
-      <button data-travel="car">Авто</button>
-    </div>
-    <label class="check"><input type="checkbox" id="fromMe" checked> от меня</label>
-  </div>
-  <button class="primary" id="buildBtn" disabled>Построить маршрут</button>
+<div id="map" aria-label="Карта"></div>
 
-  <div id="result" class="hidden">
-    <div class="summary" id="summary"></div>
+<section class="sheet" id="sheet" aria-label="Маршрут">
+  <div class="grab" aria-hidden="true"></div>
+
+  <div class="sel-row">
+    <p class="count"><span class="count-num" id="selNum">0</span><span class="count-label" id="selLabel">точек выбрано</span></p>
+    <button type="button" class="text-btn" id="clearBtn">Сбросить</button>
+  </div>
+
+  <div class="opts">
+    <div class="seg seg-sm" id="travelSeg" role="group" aria-label="Как добираться">
+      <button type="button" data-travel="foot" class="on">Пешком</button>
+      <button type="button" data-travel="car">На машине</button>
+    </div>
+    <label class="switch">
+      <input type="checkbox" id="fromMe" checked>
+      <span class="track" aria-hidden="true"></span>
+      <span>От меня</span>
+    </label>
+  </div>
+
+  <button type="button" class="primary" id="buildBtn" disabled>Построить маршрут</button>
+
+  <div id="result" class="result hidden">
+    <dl class="kpis" id="summary"></dl>
+    <p class="note" id="summaryNote"></p>
+    <button type="button" class="send hidden" id="sendBtn">Отправить список в чат</button>
     <div class="links" id="links"></div>
-    <button class="primary hidden" id="sendBtn">Отправить список в чат</button>
     <ol class="list" id="list"></ol>
   </div>
 </section>
 
-<script src="route.js?v=4"></script>
-<script src="app.js?v=4"></script>
+<script src="route.js?v=5"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
