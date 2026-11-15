@@ -38,6 +38,11 @@
   const $ = (id) => document.getElementById(id);
   const map = L.map("map", { zoomControl: false, attributionControl: true }).setView(SPB_CENTER, 11);
   map.attributionControl.setPrefix(false);
+  map.attributionControl.setPosition("topright");   // низ занят панелью
+  const FAR_ZOOM = 12;
+  const syncZoomClass = () => $("map").classList.toggle("far", map.getZoom() < FAR_ZOOM);
+  map.on("zoomend", syncZoomClass);
+  const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19, attribution: "© OpenStreetMap",
   }).addTo(map);
@@ -50,13 +55,23 @@
   /* ---------- точки ---------- */
   function visible(p) { return state.chain === "all" || p.chain === state.chain; }
 
-  function styleFor(p) {
-    if (state.selected.has(p.id)) {
-      return { radius: 8, color: "#fff", weight: 2, fillColor: ACCENT, fillOpacity: 1, dashArray: null };
-    }
-    const check = p.status === "check";
-    return { radius: 5.5, color: check ? STATUS.check.color : "#000", weight: check ? 2 : 1.5,
-      dashArray: check ? "2 3" : null, fillColor: colorFor(p.chain), fillOpacity: 0.95 };
+  function chainLetter(chain) {
+    const key = String(chain).toLowerCase().replace(/ё/g, "е");
+    if (key.includes("пятерочка") || key.includes("pyaterochka")) return "5";
+    const ch = String(chain).trim().charAt(0);
+    return ch ? ch.toUpperCase() : "•";
+  }
+
+  function pinIcon(p) {
+    const box = el("div", "pin" + (p.status === "check" ? " check" : ""), chainLetter(p.chain));
+    box.style.setProperty("--c", colorFor(p.chain));
+    return L.divIcon({ className: "", html: box, iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -10] });
+  }
+
+  function paintPin(m, on) {
+    const node = m.getElement() && m.getElement().firstElementChild;
+    if (node && node.classList.contains("sel") !== on) node.classList.toggle("sel", on);
+    m.setZIndexOffset(on ? 1000 : 0);
   }
 
   function plural(n, one, few, many) {
@@ -87,15 +102,21 @@
     return box;
   }
 
+  let shownCount = 0;
   function renderMarkers() {
     state.points.forEach((p) => {
       const m = markers.get(p.id);
-      if (visible(p)) { m.addTo(map); m.setStyle(styleFor(p)); } else { m.remove(); }
+      if (visible(p)) { if (!map.hasLayer(m)) m.addTo(map); paintPin(m, state.selected.has(p.id)); } else { m.remove(); }
     });
     const n = state.selected.size;
+    if (n !== shownCount && !reduceMotion) {
+      const num = $("selNum");
+      num.classList.remove("bump"); void num.offsetWidth; num.classList.add("bump");
+    }
+    shownCount = n;
     $("selNum").textContent = n;
     $("selNum").classList.toggle("on", n > 0);
-    $("selLabel").textContent = `${plural(n, "точка выбрана", "точки выбрано", "точек выбрано")}`;
+    $("selLabel").textContent = `${plural(n, "точка выбрана", "точки выбраны", "точек выбрано")}`;
     $("buildBtn").disabled = n < 1;
     updateHint();
   }
@@ -109,10 +130,31 @@
     }
   }
 
+  let popTimer = null;
   function setSelection(ids) {
+    clearTimeout(popTimer);
     state.selected = new Set(ids);
     clearRoute();
     renderMarkers();
+  }
+
+  // точки внутри лассо загораются по очереди от центра наружу, счётчик щёлкает следом
+  function popSelection(ids) {
+    const pts = ids.map((id) => state.points.find((p) => p.id === id));
+    if (reduceMotion || pts.length < 2) return setSelection(ids);
+    const c = { lat: pts.reduce((a, p) => a + p.lat, 0) / pts.length, lon: pts.reduce((a, p) => a + p.lon, 0) / pts.length };
+    const order = [...pts].sort((a, b) => Route.haversine(c, a) - Route.haversine(c, b)).map((p) => p.id);
+    const step = Math.max(14, Math.min(45, 650 / order.length));
+    setSelection([]);
+    let k = 0;
+    const tick = () => {
+      const batch = Math.max(1, Math.ceil(order.length / 40));   // много точек — по несколько за раз
+      state.selected = new Set([...state.selected, ...order.slice(k, k + batch)]);
+      k += batch;
+      renderMarkers();
+      if (k < order.length) popTimer = setTimeout(tick, step);
+    };
+    tick();
   }
 
   function toggle(id) {
@@ -132,6 +174,7 @@
     overlay.clearLayers();
     updateHint();
     map.invalidateSize();
+    if (lasso) setSheet(false);          // для обводки нужна вся карта
     if (mode === "radius") applyRadius();
   }
 
@@ -141,13 +184,24 @@
   $("map").addEventListener("pointerdown", (e) => {
     if (state.mode !== "lasso") return;
     overlay.clearLayers();
-    drawing = { pts: [latlngFromEvent(e)], line: L.polyline([], { color: ACCENT, weight: 2, dashArray: "4 5" }).addTo(overlay) };
+    const start = latlngFromEvent(e);
+    drawing = {
+      pts: [start],
+      casing: L.polyline([], { color: "#000", weight: 9, opacity: 0.55, lineCap: "round", lineJoin: "round", interactive: false }).addTo(overlay),
+      line: L.polyline([], { color: ACCENT, weight: 4, lineCap: "round", lineJoin: "round", interactive: false }).addTo(overlay),
+      close: L.polyline([], { color: ACCENT, weight: 1.5, opacity: 0.7, dashArray: "3 6", interactive: false }).addTo(overlay),
+      head: L.circleMarker(start, { radius: 7, color: "#000", weight: 2, fillColor: ACCENT, fillOpacity: 1, interactive: false }).addTo(overlay),
+    };
     $("map").setPointerCapture(e.pointerId);
   });
   $("map").addEventListener("pointermove", (e) => {
     if (!drawing) return;
-    drawing.pts = [...drawing.pts, latlngFromEvent(e)];
+    const ll = latlngFromEvent(e);
+    drawing.pts = [...drawing.pts, ll];
+    drawing.casing.setLatLngs(drawing.pts);
     drawing.line.setLatLngs(drawing.pts);
+    drawing.close.setLatLngs([ll, drawing.pts[0]]);   // пунктир показывает, как замкнётся контур
+    drawing.head.setLatLng(ll);
   });
   $("map").addEventListener("pointerup", () => {
     if (!drawing) return;
@@ -155,9 +209,10 @@
     overlay.clearLayers();
     drawing = null;
     if (poly.length < 3) return;
-    L.polygon(poly.map((p) => [p.lat, p.lon]), { color: ACCENT, weight: 1.5, fillColor: ACCENT, fillOpacity: 0.08 }).addTo(overlay);
+    L.polygon(poly.map((p) => [p.lat, p.lon]), { color: ACCENT, weight: 2, fillColor: ACCENT, fillOpacity: 0.1, interactive: false }).addTo(overlay);
     const ids = state.points.filter((p) => visible(p) && Route.insidePolygon(p, poly)).map((p) => p.id);
-    setSelection(ids);
+    popSelection(ids);
+    if (ids.length) setSheet(true);
   });
 
   // радиус
@@ -194,6 +249,7 @@
   function clearRoute() {
     routeLayer.clearLayers();
     $("result").classList.add("hidden");
+    $("selSub").classList.add("hidden");
   }
 
   // если стартуем не от себя — начинаем с крайней точки (самой дальней от центра выборки)
@@ -231,10 +287,10 @@
     const shops = ordered.filter((p) => p.id !== "me");
     shops.forEach((p, i) => {
       L.marker([p.lat, p.lon], { icon: L.divIcon({ className: "",
-        html: `<div class="num-pin">${i + 1}</div>`, iconSize: [26, 26] }) })
+        html: `<div class="num-pin">${i + 1}</div>`, iconSize: [26, 26] }), zIndexOffset: 2000 })
         .bindPopup(popupHtml(p)).addTo(routeLayer);
     });
-    map.fitBounds(L.latLngBounds(trip.geometry), { paddingTopLeft: [24, 24], paddingBottomRight: [24, Math.min(window.innerHeight * 0.4, 320)] });
+    map.fitBounds(L.latLngBounds(trip.geometry), { paddingTopLeft: [24, 24], paddingBottomRight: [24, sheetVisible() + 24] });
 
     const dist = trip.legs.reduce((s, l) => s + l.distance, 0);
     const dur = trip.legs.reduce((s, l) => s + l.duration, 0);
@@ -284,7 +340,69 @@
       km: +(dist / 1000).toFixed(1), min: Math.round(dur / 60), approx: trip.approximate };
     $("sendBtn").classList.toggle("hidden", !inTelegram);
     $("result").classList.remove("hidden");
+    const sub = $("selSub");
+    sub.textContent = "";
+    sub.append(el("b", null, km < 1 ? `${Math.round(dist)} м` : `${km.toFixed(1)} км`), ` · ${Route.fmtDuration(dur)} ${state.travel === "car" ? "на машине" : "пешком"}`);
+    sub.classList.remove("hidden");
   }
+
+  /* ---------- нижняя панель: тянется пальцем ---------- */
+  const sheet = $("sheet");
+  const handle = $("sheetHandle");
+  const SNAP_VELOCITY = 0.4;   // px/ms — быстрый взмах решает сам, куда закрыться
+  const TAP_SLOP = 6;
+  let sheetOpen = true;
+  let sheetY = 0;
+
+  function peekY() {
+    // снизу оставляем только безопасную зону телефона (padding-bottom = 14px + safe-area) и небольшой воздух
+    const safe = Math.max(0, (parseFloat(getComputedStyle(sheet).paddingBottom) || 0) - 14);
+    return Math.max(0, sheet.offsetHeight - (handle.offsetTop + handle.offsetHeight + safe + 8));
+  }
+  function sheetVisible() { return sheet.offsetHeight - sheetY; }
+  function applySheet(y) {
+    sheetY = y;
+    sheet.style.setProperty("--sheet-y", `${y}px`);
+  }
+  function setSheet(open) {
+    sheetOpen = open;
+    if (!open) sheet.scrollTop = 0;
+    sheet.classList.toggle("peek", !open);
+    applySheet(open ? 0 : peekY());
+  }
+
+  let drag = null;
+  handle.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button")) return;
+    drag = { y0: e.clientY, from: sheetY, t: performance.now(), lastY: e.clientY, lastT: performance.now(), v: 0, moved: false };
+    sheet.classList.add("dragging");
+    handle.setPointerCapture(e.pointerId);
+  });
+  handle.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y0;
+    if (Math.abs(dy) > TAP_SLOP) drag.moved = true;
+    const now = performance.now();
+    drag.v = (e.clientY - drag.lastY) / Math.max(1, now - drag.lastT);
+    drag.lastY = e.clientY; drag.lastT = now;
+    const max = peekY();
+    // за края тянется туго, как резинка
+    let y = drag.from + dy;
+    if (y < 0) y = y / 3; else if (y > max) y = max + (y - max) / 3;
+    applySheet(y);
+  });
+  const endDrag = () => {
+    if (!drag) return;
+    sheet.classList.remove("dragging");
+    const { moved, v } = drag;
+    drag = null;
+    if (!moved) return setSheet(!sheetOpen);
+    if (Math.abs(v) > SNAP_VELOCITY) return setSheet(v < 0);
+    setSheet(sheetY < peekY() / 2);
+  };
+  handle.addEventListener("pointerup", endDrag);
+  handle.addEventListener("pointercancel", endDrag);
+  if (window.ResizeObserver) new ResizeObserver(() => { if (!drag && !sheetOpen) applySheet(peekY()); }).observe(sheet);
 
   /* ---------- UI ---------- */
   function bindSeg(id, attr, fn) {
@@ -311,7 +429,7 @@
     if (me) map.setView([me.lat, me.lon], 14);
     else { $("hint").textContent = "Не получилось определить, где ты. Разреши доступ к геолокации."; $("hint").classList.remove("hidden"); map.invalidateSize(); }
   });
-  $("buildBtn").addEventListener("click", build);
+  $("buildBtn").addEventListener("click", () => { setSheet(true); build(); });
   $("sendBtn").addEventListener("click", () => { if (tg && state.lastRoute) tg.sendData(JSON.stringify(state.lastRoute)); });
 
   /* ---------- старт ---------- */
@@ -356,11 +474,13 @@
       state.points = data.points;
       buildChips(data.points);
       data.points.forEach((p) => {
-        const m = L.circleMarker([p.lat, p.lon], styleFor(p)).bindTooltip(document.createTextNode(p.title)).bindPopup(popupHtml(p));
+        const m = L.marker([p.lat, p.lon], { icon: pinIcon(p), keyboard: false })
+          .bindTooltip(document.createTextNode(p.title), { direction: "top", offset: [0, -10] }).bindPopup(popupHtml(p));
         m.on("click", () => { if (state.mode === "tap") toggle(p.id); });
         markers.set(p.id, m);
       });
-      if (data.points.length) map.fitBounds(L.latLngBounds(data.points.map((p) => [p.lat, p.lon])), { padding: [30, 30] });
+      if (data.points.length) map.fitBounds(L.latLngBounds(data.points.map((p) => [p.lat, p.lon])), { paddingTopLeft: [30, 30], paddingBottomRight: [30, sheetVisible() + 20] });
+      syncZoomClass();
       const warn = data.points.filter((p) => p.status === "check").length;
       const n = data.points.length;
       $("title").textContent = data.city || data.title || "Карта точек";

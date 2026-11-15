@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<link rel="stylesheet" href="app.css?v=6">
+<link rel="stylesheet" href="app.css?v=7">
 </head>
 <body>
 <header class="top" id="top">
@@ -47,11 +47,13 @@
 <div id="map" aria-label="Карта"></div>
 
 <section class="sheet" id="sheet" aria-label="Маршрут">
-  <div class="grab" aria-hidden="true"></div>
-
-  <div class="sel-row">
-    <p class="count"><span class="count-num" id="selNum">0</span><span class="count-label" id="selLabel">точек выбрано</span></p>
-    <button type="button" class="text-btn" id="clearBtn">Сбросить</button>
+  <div class="sheet-handle" id="sheetHandle">
+    <div class="grab" aria-hidden="true"></div>
+    <div class="sel-row">
+      <p class="count"><span class="count-num" id="selNum">0</span><span class="count-label" id="selLabel">точек выбрано</span></p>
+      <button type="button" class="text-btn" id="clearBtn">Сбросить</button>
+    </div>
+    <p class="count-sub hidden" id="selSub"></p>
   </div>
 
   <div class="opts">
@@ -77,7 +79,7 @@
   </div>
 </section>
 
-<script src="route.js?v=6"></script>
-<script src="app.js?v=6"></script>
+<script src="route.js?v=7"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

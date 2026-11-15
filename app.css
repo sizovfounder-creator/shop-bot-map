@@ -25,7 +25,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--ground); color: var(--ink);
   font: 400 15px/1.45 var(--font); -webkit-font-smoothing: antialiased; }
-body { display: flex; flex-direction: column; overflow: hidden; }
+body { display: flex; flex-direction: column; overflow: hidden; position: relative; }
 button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 button:focus-visible, input:focus-visible + .track, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hidden { display: none !important; }
@@ -90,6 +90,18 @@ h1 { font-size: 20px; line-height: 24px; font-weight: 700; letter-spacing: -0.01
 .pop-status i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .pop-raw { color: var(--ink-3); font-size: 12px; margin-top: 6px; }
 
+/* точки: кружок цвета сети с буквой сети */
+.pin { width: 22px; height: 22px; border-radius: 50%; background: var(--c); color: #000; border: 2px solid #000;
+  display: grid; place-items: center; font: 700 11px/1 var(--font); transition: background var(--fast), border-color var(--fast); }
+.pin.check { outline: 2px dashed var(--warn); outline-offset: 1px; }
+.pin.sel { background: var(--accent); color: var(--accent-ink); border-color: #fff; outline-color: #fff;
+  animation: pop 300ms var(--ease); }
+@keyframes pop { 0% { transform: scale(.55); } 55% { transform: scale(1.35); } 100% { transform: scale(1); } }
+/* издалека — без букв, мельче, чтобы 200 точек не слипались */
+#map.far .pin { width: 12px; height: 12px; font-size: 0; border-width: 1.5px; margin: 5px; }
+#map.far .pin.check { outline-width: 1.5px; }
+#map.far .pin.sel { width: 16px; height: 16px; margin: 3px; }
+
 .num-pin { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
   display: grid; place-items: center; font: 700 12px/1 var(--font); border: 2px solid var(--ground);
   font-variant-numeric: tabular-nums; }
@@ -97,16 +109,30 @@ h1 { font-size: 20px; line-height: 24px; font-weight: 700; letter-spacing: -0.01
   box-shadow: 0 0 0 6px rgba(255,255,255,.18); }
 
 /* ---------- нижняя панель ---------- */
-.sheet { position: relative; z-index: 600; background: var(--surface); border-radius: var(--r-sheet) var(--r-sheet) 0 0;
-  margin-top: calc(-1 * var(--r-sheet)); padding: 8px var(--gutter) calc(14px + env(safe-area-inset-bottom));
-  max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; }
-.grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line-strong); margin: 0 auto 10px; }
+/* панель лежит поверх карты и ездит за пальцем: открыта или свёрнута в полоску */
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 600; background: var(--surface);
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0; padding: 0 var(--gutter) calc(14px + env(safe-area-inset-bottom));
+  max-height: 78vh; overflow-y: auto; overscroll-behavior: contain;
+  transform: translateY(var(--sheet-y, 0px)); transition: transform 320ms var(--ease); will-change: transform; }
+.sheet.dragging { transition: none; }
+.sheet.peek { overflow: hidden; }
+.sheet-handle { position: sticky; top: 0; z-index: 1; background: var(--surface); padding-top: 8px;
+  touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.sheet.dragging .sheet-handle { cursor: grabbing; }
+.grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line-strong); margin: 0 auto 10px;
+  transition: background var(--fast), width var(--fast); }
+.sheet-handle:active .grab { background: var(--ink-3); }
+.count-sub { color: var(--ink-2); font-size: 14px; line-height: 20px; margin: -2px 0 4px; font-variant-numeric: tabular-nums; }
+.count-sub b { color: var(--ink); font-weight: 600; }
 
 .sel-row { display: flex; align-items: center; justify-content: space-between; }
 .count { display: flex; align-items: baseline; gap: 8px; }
 .count-num { font-size: 32px; line-height: 36px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
   transition: color var(--fast); }
 .count-num.on { color: var(--accent); }
+.count-num.bump { animation: bump 180ms var(--ease); }
+@keyframes bump { 50% { transform: scale(1.18); } }
+.count-num { display: inline-block; transform-origin: left 70%; }
 .count-label { color: var(--ink-2); font-size: 15px; }
 
 .opts { display: flex; align-items: center; gap: 12px; margin: 10px 0 12px; }
