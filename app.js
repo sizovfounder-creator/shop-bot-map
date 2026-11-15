@@ -315,7 +315,14 @@
   $("sendBtn").addEventListener("click", () => { if (tg && state.lastRoute) tg.sendData(JSON.stringify(state.lastRoute)); });
 
   /* ---------- старт ---------- */
-  if (tg) { tg.ready(); tg.expand(); }
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    // иначе свайп вниз (обвести сверху вниз) закрывает мини-апп
+    if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+    if (tg.setHeaderColor) try { tg.setHeaderColor("#000000"); } catch (e) { /* старый клиент */ }
+    if (tg.setBackgroundColor) try { tg.setBackgroundColor("#000000"); } catch (e) { /* старый клиент */ }
+  }
   function buildChips(points) {
     const chains = [...new Set(points.map((p) => p.chain))];
     const box = $("chainChips");
