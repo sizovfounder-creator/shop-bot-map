@@ -103,6 +103,10 @@
   function yandexLinks(ordered, travel) {
     const rtt = travel === "car" ? "auto" : "pd";
     const links = [];
+    if (ordered.length === 1) {
+      const p = ordered[0];
+      return [{ from: 1, to: 1, url: `https://yandex.ru/maps/?rtext=~${p.lat},${p.lon}&rtt=${rtt}` }];
+    }
     for (let s = 0; s < ordered.length - 1; s += LINK_CHUNK - 1) {
       const part = ordered.slice(s, s + LINK_CHUNK);
       const rtext = part.map((p) => `${p.lat},${p.lon}`).join("~");
@@ -111,12 +115,38 @@
     return links;
   }
 
+  // Сообщение содержит только маршрут в Яндексе: получателю не нужен бот.
+  function shareMessages(ordered, travel, trip, title) {
+    return yandexLinks(ordered, travel).map((link, index, links) => {
+      const part = ordered.slice(link.from - 1, link.to);
+      const shops = part.filter((p) => p.id !== "me");
+      const legs = trip.legs.slice(link.from - 1, link.to - 1);
+      const distance = legs.reduce((sum, leg) => sum + leg.distance, 0);
+      const duration = legs.reduce((sum, leg) => sum + leg.duration, 0);
+      const short = (s) => String(s || "").replace(/\s+/g, " ").trim().slice(0, 160);
+      const first = part[0].id === "me" ? "заданная точка старта" : short(part[0].title);
+      const n = shops.length;
+      const noun = n % 10 === 1 && n % 100 !== 11 ? "магазин" :
+        n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "магазина" : "магазинов";
+      const text = [
+        `Маршрут${title ? " · " + short(title) : ""}${links.length > 1 ? ` · часть ${index + 1}/${links.length}` : ""}`,
+        `${n} ${noun} · ${travel === "car" ? "на машине" : "пешком"}`,
+        ...(legs.length ? [`В пути ≈ ${fmtDuration(duration)} · ${fmtDistance(distance)} (без времени в магазинах)`] : []),
+        `Начало: ${first}`,
+        `Последний магазин: ${short(part[part.length - 1].title)}`,
+        ...(trip.approximate ? ["Расстояние и время приблизительные; уточни маршрут в Яндексе."] : []),
+      ].join("\n");
+      return { url: link.url, text,
+        shareUrl: `https://t.me/share/url?url=${encodeURIComponent(link.url)}&text=${encodeURIComponent(text)}` };
+    });
+  }
+
   function fmtDistance(m) { return m < 1000 ? `${Math.round(m)} м` : `${(m / 1000).toFixed(1)} км`; }
   function fmtDuration(s) {
     const min = Math.round(s / 60);
     return min < 60 ? `${min} мин` : `${Math.floor(min / 60)} ч ${min % 60} мин`;
   }
 
-  const api = { haversine, insidePolygon, localOrder, buildTrip, yandexLinks, fmtDistance, fmtDuration, MAX_TRIP_POINTS };
+  const api = { haversine, insidePolygon, localOrder, buildTrip, yandexLinks, shareMessages, fmtDistance, fmtDuration, MAX_TRIP_POINTS };
   if (typeof module !== "undefined") module.exports = api; else root.Route = api;
 })(this);

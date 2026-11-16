@@ -247,6 +247,8 @@
 
   /* ---------- маршрут ---------- */
   function clearRoute() {
+    state.lastRoute = null;
+    $("shareLinks").replaceChildren();
     routeLayer.clearLayers();
     $("result").classList.add("hidden");
     $("selSub").classList.add("hidden");
@@ -318,6 +320,16 @@
       a.textContent = all.length === 1 ? "Открыть в Яндекс Картах" : `Яндекс Карты · ${l.from}–${l.to}`;
       a.addEventListener("click", (e) => { if (tg && tg.openLink) { e.preventDefault(); tg.openLink(l.url); } });
       $("links").appendChild(a);
+    });
+
+    $("shareLinks").replaceChildren();
+    Route.shareMessages(ordered, state.travel, trip, $("title").textContent).forEach((message, i, all) => {
+      const a = el("a", "share-link", all.length === 1 ? "Поделиться маршрутом" : `Поделиться · часть ${i + 1}/${all.length}`);
+      a.href = message.shareUrl; a.target = "_blank"; a.rel = "noopener";
+      a.addEventListener("click", (e) => {
+        if (inTelegram && tg.openTelegramLink) { e.preventDefault(); tg.openTelegramLink(message.shareUrl); }
+      });
+      $("shareLinks").appendChild(a);
     });
 
     $("list").innerHTML = "";
